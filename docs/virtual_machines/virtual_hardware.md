@@ -124,24 +124,9 @@ The following VM will have a CPU with `3` cores:
 
 #### Enabling cpu compatibility enforcement
 
-To enable the CPU compatibility enforcement, user may expand the
-`featureGates` field in the KubeVirt CR by adding the
-`CPUNodeDiscovery` to it.
-
-```
-    apiVersion: kubevirt.io/v1alpha3
-    kind: Kubevirt
-    metadata:
-      name: kubevirt
-      namespace: kubevirt
-    spec:
-      ...
-      configuration:
-        developerConfiguration:
-          featureGates:
-            - "CPUNodeDiscovery"
-    ...
-```
+To enable the CPU compatibility enforcement, the `CPUNodeDiscovery`
+[feature gates](../operations/activating_feature_gates.md#how-to-activate-a-feature-gate)
+must be enabled in the KubeVirt CR.
 
 This feature-gate allows kubevirt to take VM cpu model and cpu features
 and create node selectors from them. With these node selectors, VM can
@@ -172,8 +157,8 @@ cpu model for features. Both features can be set via KubeVirt CR:
       configuration:
         minCPUModel: "Penryn"
         obsoleteCPUModels:
-          - "486"
-          - "pentium"
+          486: true
+          pentium: true
     ...
 ```
 
@@ -547,10 +532,10 @@ place the VM.
         resources:
           requests:
             memory: "1Gi"
-            cpu: "2"
+            cpu: "1"
           limits:
             memory: "2Gi"
-            cpu: "1"
+            cpu: "2"
           disks:
           - name: myimage
             disk: {}
@@ -619,6 +604,8 @@ regular memory it will use node hugepages of the size of `2Mi`.
 -   hugepages size cannot be bigger than requested memory
 
 -   requested memory must be divisible by hugepages size
+
+-   hugepages uses by default memfd. Memfd is supported from kernel >= 4.14. If you run on an older host (e.g centos 7.9), it is required to disable memfd with the annotation `kubevirt.io/memfd: "false"` in the VMI metadata annotation.
 
 ## Input Devices
 

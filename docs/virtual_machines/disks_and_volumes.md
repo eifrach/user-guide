@@ -140,7 +140,7 @@ A `cdrom` disk will expose the volume as a cdrom drive to the VM. It is
 read-only by default.
 
 A minimal example which attaches a `PersistentVolumeClaim` named `mypvc`
-as a `floppy` device to the VM:
+as a `cdrom` device to the VM:
 
     metadata:
       name: testvmi-cdrom
@@ -190,6 +190,8 @@ Supported volume sources are
 -   [**secret**](#secret)
 
 -   [**serviceAccount**](#serviceaccount)
+
+-   [**downwardMetrics**](#downwardmetrics)
 
 All possible configuration options are available in the [Volume API
 Reference](https://kubevirt.github.io/api-reference/master/definitions.html#_v1_volume).
@@ -277,17 +279,18 @@ A `PersistentVolume` can be in "filesystem" or "block" mode:
     `disk.img` image file needs to be owned by the user-id `107` in
     order to avoid permission issues.
 
-    > **Note:** If the `disk.img` image file has not been created
-    > manually before starting a VM then it will be created
-    > automatically with the `PersistentVolumeClaim` size. Since not
-    > every storage provisioner provides volumes with the exact usable
-    > amount of space as requested (e.g. due to filesystem overhead),
-    > KubeVirt tolerates up to 10% less available space. This can be
-    > configured with the `pvc-tolerate-less-space-up-to-percent` value
-    > in the `kubevirt-config` ConfigMap.
+    > **Note:** If the `disk.img` image file has not been created manually
+    > before starting a VM then it will be created automatically with the
+    > `PersistentVolumeClaim` size. Since not every storage provisioner
+    > provides volumes with the exact usable amount of space as requested (e.g.
+    > due to filesystem overhead), KubeVirt tolerates up to 10% less available
+    > space. This can be configured with the
+    > `developerConfiguration.pvcTolerateLessSpaceUpToPercent` value in the
+    > KubeVirt CR (`kubectl edit kubevirt kubevirt -n kubevirt`).
 
 -   Block: Use a block volume for consuming raw block devices. Note: you
-    need to enable the BlockVolume feature gate.
+    need to enable the `BlockVolume`
+    [feature gate](../operations/activating_feature_gates.md#how-to-activate-a-feature-gate).
 
 A simple example which attaches a `PersistentVolumeClaim` as a `disk`
 may look like this:
@@ -423,9 +426,7 @@ users a workflow for dynamically creating PVCs and importing data into
 those PVCs.
 
 In order to take advantage of the DataVolume volume source on a VM or
-VMI, the **DataVolumes** feature gate must be enabled in the
-**kubevirt-config** config map before KubeVirt is installed. CDI must
-also be installed.
+VMI, CDI must be installed.
 
 **Installing CDI**
 
@@ -434,29 +435,6 @@ page](https://github.com/kubevirt/containerized-data-importer/releases)
 
 Pick the latest stable release and post the corresponding
 cdi-controller-deployment.yaml manifest to your cluster.
-
-**Enabling the DataVolumes feature gate**
-
-Below is an example of how to enable DataVolume support using the
-kubevirt-config config map.
-
-    cat <<EOF | kubectl create -f -
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: kubevirt-config
-      namespace: kubevirt
-      labels:
-        kubevirt.io: ""
-    data:
-      feature-gates: "DataVolumes"
-    EOF
-
-This config map assumes KubeVirt will be installed in the kubevirt
-namespace. Change the namespace to suite your installation.
-
-First post the ConfigMap above, then install KubeVirt. At that point
-DataVolume integration will be enabled.
 
 ### ephemeral
 
@@ -677,6 +655,8 @@ Kubernetes and provides two usage types:
 
 -   `Disk` a disk image must exist at a given location
 
+Note: you need to enable the HostDisk feature gate.
+
 Example: Create a 1Gi disk image located at /data/disk.img and attach it
 to a VM.
 
@@ -880,6 +860,70 @@ Example:
         serviceAccount:
           serviceAccountName: default
 
+### downwardMetrics
+
+A `downwardMetrics` volume exposes a limited set of VM and host metrics to the
+guest as a raw block volume. The format of the block volume is compatible with
+[vhostmd](https://github.com/vhostmd/vhostmd).
+
+Getting a limited set of host and VM metrics is in some cases required to allow
+third-parties diagnosing performance issues on their appliances. One prominent
+example is SAP HANA.
+
+Example:
+
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachineInstance
+    metadata:
+      labels:
+        special: vmi-fedora
+      name: vmi-fedora
+    spec:
+      domain:
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: containerdisk
+          - disk:
+              bus: virtio
+            name: metrics
+        machine:
+          type: ""
+        resources:
+          requests:
+            memory: 1024M
+      terminationGracePeriodSeconds: 0
+      volumes:
+      - name: containerdisk
+        containerDisk:
+          image: kubevirt/fedora-cloud-container-disk-demo:latest
+      - name: metrics
+        downwardMetrics: {}
+
+The `vm-dump-metrics` tool can be used to read the metrics:
+
+    $ dnf install -y vm-dump-metrics
+    $ vm-dump-metrics
+    <metrics>
+      <metric type="string" context="host">
+        <name>HostName</name>
+        <value>node01</value>
+    [...]
+      <metric type="int64" context="host" unit="s">
+        <name>Time</name>
+        <value>1619008605</value>
+      </metric>
+      <metric type="string" context="host">
+        <name>VirtualizationVendor</name>
+        <value>kubevirt.io</value>
+      </metric>
+    </metrics>
+
+> **Note:** The **DownwardMetrics** feature gate
+> [must be enabled](../operations/activating_feature_gates.md#how-to-activate-a-feature-gate)
+> to use this volume. Available starting with KubeVirt v0.42.0.
+
 ## High Performance Features
 
 ### IOThreads
@@ -944,7 +988,7 @@ fewer IOThreads than CPU, each IOThread will be pinned to a set of CPUs.
 #### IOThreads with QEMU Emulator thread and Dedicated (pinned) CPUs
 
 To further improve the vCPUs latency, KubeVirt can allocate an
-additional dedicated physical CPU<sup>[1](../virtual_hardware#cpu)</sup>, exclusively for the emulator thread, to which it will
+additional dedicated physical CPU<sup>[1](./virtual_hardware.md#cpu)</sup>, exclusively for the emulator thread, to which it will
 be pinned. This will effectively "isolate" the emulator thread from the vCPUs
 of the VMI. When `ioThreadsPolicy` is set to `auto` IOThreads will also be
 "isolated" from the vCPUs and placed on the same physical CPU as the QEMU
@@ -1211,3 +1255,150 @@ Example: force `writethrough` cache mode
         persistentVolumeClaim:
           claimName: disk-alpine
     status: {}
+
+### Disk sharing
+
+Shareable disks allow multiple VMs to share the same underlying storage. In order to use this feature, special care is required because this could lead to data corruption and the loss of important data. Shareable disks demand either data synchronization at the application level or the use of clustered filesystems. These advanced configurations are not within the scope of this documentation and are use-case specific.
+
+If the `shareable` option is set, it indicates to libvirt/QEMU that the disk is going to be accessed by multiple VMs and not to create a lock for the writes.
+
+In this example, we use Rook Ceph in order to dynamically provisioning the PVC.
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: block-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Block
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: rook-ceph-block
+```
+```bash
+$ kubectl get pvc
+NAME        STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS      AGE
+block-pvc   Bound    pvc-0a161bb2-57c7-4d97-be96-0a20ff0222e2   1Gi        RWO            rook-ceph-block   51s
+```
+Then, we can declare 2 VMs and set the `shareable` option to true for the shared disk.
+```yaml
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    kubevirt.io/vm: vm-block-1
+  name: vm-block-1
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: vm-block-1
+    spec:
+      domain:
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: containerdisk
+          - disk:
+              bus: virtio
+            name: cloudinitdisk
+          - disk:
+              bus: virtio
+            shareable: true
+            name: block-disk
+        machine:
+          type: ""
+        resources:
+          requests:
+            memory: 2G
+      terminationGracePeriodSeconds: 0
+      volumes:
+      - containerDisk:
+          image: registry:5000/kubevirt/fedora-with-test-tooling-container-disk:devel
+        name: containerdisk
+      - cloudInitNoCloud:
+          userData: |-
+            #cloud-config
+            password: fedora
+            chpasswd: { expire: False }
+        name: cloudinitdisk
+      - name: block-disk
+        persistentVolumeClaim:
+          claimName: block-pvc
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    kubevirt.io/vm: vm-block-2
+  name: vm-block-2
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: vm-block-2
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: kubevirt.io/vm
+                operator: In
+                values:
+                - vm-block-1
+            topologyKey: "kubernetes.io/hostname"
+      domain:
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: containerdisk
+          - disk:
+              bus: virtio
+            name: cloudinitdisk
+          - disk:
+              bus: virtio
+            shareable: true
+            name: block-disk
+        machine:
+          type: ""
+        resources:
+          requests:
+            memory: 2G
+      terminationGracePeriodSeconds: 0
+      volumes:
+      - containerDisk:
+          image: registry:5000/kubevirt/fedora-with-test-tooling-container-disk:devel
+        name: containerdisk
+      - cloudInitNoCloud:
+          userData: |-
+            #cloud-config
+            password: fedora
+            chpasswd: { expire: False }
+        name: cloudinitdisk
+      - name: block-disk
+        persistentVolumeClaim:
+          claimName: block-pvc                                        
+```
+We can now attempt to write a string from the first guest and then read the string from the second guest to test that the sharing is working.
+```bash
+$ virtctl console vm-block-1
+$ printf "Test awesome shareable disks" | sudo dd  of=/dev/vdc bs=1 count=150 conv=notrunc
+28+0 records in
+28+0 records out
+28 bytes copied, 0.0264182 s, 1.1 kB/s
+# Log into the second guest
+$ virtctl console vm-block-2
+$ sudo dd  if=/dev/vdc bs=1 count=150 conv=notrunc
+Test awesome shareable disks150+0 records in
+150+0 records out
+150 bytes copied, 0.136753 s, 1.1 kB/s
+```
+
+If you are using local devices or RWO PVCs, setting the affinity on the VMs that share the storage guarantees they will be scheduled on the same node. In the example, we set the affinity on the second VM using the label used on the first VM. If you are using shared storage with RWX PVCs, then the affinity rule is not necessary as the storage can be attached simultaneously on multiple nodes.

@@ -26,10 +26,10 @@ Signature verification on commits are required -- you may sign your commits by r
 $ git commit -s -m "The commit message" file1 file 2 ...
 ```
 
-If you need to sign all commits from a certain point (for example, `master`), you may run:
+If you need to sign all commits from a certain point (for example, `main`), you may run:
 
 ```console
-git rebase --exec 'git commit --amend --no-edit -n -s' -i master
+git rebase --exec 'git commit --amend --no-edit -n -s' -i main
 ```
 
 Signed commit messages generally take the following form:
@@ -46,7 +46,7 @@ Signed-off-by: <your configured git identity>
 ```console
 $ make check_spelling
 $ make check_links
-$ make build_image_userguide
+$ make build_img
 $ make run
 ```
 
@@ -58,7 +58,9 @@ $ export BUILD_ENGINE=docker
 $ make run
 ```
 
+<!-- markdown-link-check-disable -->
 Open your web browser to http://0.0.0.0:8000 and validate page rendering
+<!-- markdown-link-check-enable -->
 
 ### Create a pull request to `kubevirt/user-guide`
 
@@ -82,7 +84,7 @@ Targets:
   help                   Show help
   check_links            Check external and internal links
   check_spelling         Check spelling on site content
-  build_image_userguide  Build image: userguide
+  build_img  Build image: userguide
   build_image_yaspeller  Build image: yaspeller
   build                  Build site. This target should only be used by Prow jobs.
   run                    Run site.  App available @ http://0.0.0.0:8000
@@ -113,7 +115,7 @@ Targets:
 
 * check_spelling: yaspeller is used to check spelling.  Feel free to update to the dictionary file as needed (`kubevirt/project-infra/images/yaspeller/.yaspeller.json`).
 
-* build_image_userguide: mkdocs project does not provide a container image.  Use this target to build an image packed with python and mkdocs app.  ./docs will be mounted.  ./site will be mounted as tmpfs...changes here are lost.
+* build_img: mkdocs project does not provide a container image.  Use this target to build an image packed with python and mkdocs app.  ./docs will be mounted.  ./site will be mounted as tmpfs...changes here are lost.
 
 * build_image_yaspeller: yaspeller project does not provide a container image.  User this target to Build an image packed with nodejs and yaspeller app.  ./docs will be mounted.  yaspeller will check content for spelling and other bad forms of English.
 

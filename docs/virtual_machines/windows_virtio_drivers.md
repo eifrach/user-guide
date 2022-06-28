@@ -5,14 +5,12 @@ Microsoft Windows running in a fully virtualized guest.
 
 ## Do I need virtio drivers?
 
-Yes. Without the virtio drivers, you cannot use
-[paravirtualized](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/virtualization_getting_started_guide/sec-virtualization_getting_started-products-virtualized-hardware-devices#sec-Virtualization_Getting_Started-Products-paravirtdevices)
-hardware properly. It would either not work, or will have a severe
-performance penalty.
+Yes. Without the virtio drivers, you cannot use paravirtualized hardware properly. It would either not work, or will have a severe performance penalty.
 
-For more details on configuring your guest please refer to [Guest
-Virtual Machine Device
-Configuration](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/virtualization_deployment_and_administration_guide/chap-guest_virtual_machine_device_configuration).
+For more information about VirtIO and paravirtualization, see [VirtIO and paravirtualization](https://wiki.libvirt.org/page/Virtio)
+
+For more details on configuring your VirtIO driver please refer to [Installing VirtIO driver on a new Windows virtual machine](https://docs.openshift.com/container-platform/4.10/virt/virtual_machines/virt-installing-virtio-drivers-on-new-windows-vm.html) and [Installing VirtIO driver on an existing Windows virtual machine](https://docs.openshift.com/container-platform/4.10/virt/virtual_machines/virt-installing-virtio-drivers-on-existing-windows-vm.html).
+
 
 ## Which drivers I need to install?
 
@@ -106,13 +104,13 @@ Enterprise Linux 7](https://access.redhat.com/articles/2470791).
 ## How to obtain virtio drivers?
 
 The virtio Windows drivers are distributed in a form of
-[containerDisk](../disks_and_volumes/#containerdisk),
+[containerDisk](./disks_and_volumes.md#containerdisk),
 which can be simply mounted to the VirtualMachine. The container image,
 containing the disk is located at:
-<https://hub.docker.com/r/kubevirt/virtio-container-disk> and the image
+<https://quay.io/repository/kubevirt/virtio-container-disk?tab=tags> and the image
 be pulled as any other docker container:
 
-    docker pull kubevirt/virtio-container-disk
+    docker pull quay.io/kubevirt/virtio-container-disk
 
 However, pulling image manually is not required, it will be downloaded
 if not present by Kubernetes when deploying VirtualMachine.
@@ -148,7 +146,7 @@ ContainerDisk to you VirtualMachine.
                 bus: sata
     volumes:
       - containerDisk:
-          image: kubevirt/virtio-container-disk
+          image: quay.io/kubevirt/virtio-container-disk
         name: virtiocontainerdisk
 
 Once you are done installing virtio drivers, you can remove virtio

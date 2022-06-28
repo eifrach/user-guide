@@ -181,6 +181,27 @@ spec:
       networkName: macvlan-test
 ```
 
+#### Invalid CNIs for secondary networks
+The following list of CNIs is known **not** to work for bridge interfaces -
+which are most common for secondary interfaces.
+
+- [macvlan](https://www.cni.dev/plugins/current/main/macvlan/)
+
+- [ipvlan](https://www.cni.dev/plugins/current/main/ipvlan/)
+
+The reason is similar: the bridge interface type moves the pod interface MAC
+address to the VM, leaving the pod interface with a different address. The
+aforementioned CNIs require the pod interface to have the original MAC address.
+
+These issues are tracked individually:
+
+- [macvlan](https://github.com/kubevirt/kubevirt/issues/5483)
+
+- [ipvlan](https://github.com/kubevirt/kubevirt/issues/7001)
+
+Feel free to discuss and / or propose fixes for them; we'd like to have
+these plugins as valid options on our ecosystem.
+
 ## Frontend
 
 Network interfaces are configured in `spec.domain.devices.interfaces`.
@@ -286,47 +307,46 @@ spec:
     pod: {}
 ```
 
-> **Note:** If a specific MAC address is configured for a virtual
-> machine interface, it's passed to the underlying CNI plugin that is
-> expected to configure the backend to allow for this particular MAC
-> address. Not every plugin has native support for custom MAC addresses.
+> **Note:** For secondary interfaces, when a MAC address is specified for a
+> virtual machine interface, it is passed to the underlying CNI plugin which is,
+> in turn, expected to configure the backend to allow for this particular MAC.
+> Not every plugin has native support for custom MAC addresses.
 
 > **Note:** For some CNI plugins without native support for custom MAC
 > addresses, there is a workaround, which is to use the `tuning` CNI
 > plugin to adjust pod interface MAC address. This can be used as
 > follows:
->
-> ```yaml
-> apiVersion: "k8s.cni.cncf.io/v1"
-> kind: NetworkAttachmentDefinition
-> metadata:
->   name: ptp-mac
-> spec:
->   config: '{
->       "cniVersion": "0.3.1",
->       "name": "ptp-mac",
->       "plugins": [
->         {
->           "type": "ptp",
->           "ipam": {
->             "type": "host-local",
->             "subnet": "10.1.1.0/24"
->           }
->         },
->         {
->           "type": "tuning"
->         }
->       ]
->     }'
-> ```
->
+
+```yaml
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: ptp-mac
+spec:
+  config: '{
+      "cniVersion": "0.3.1",
+      "name": "ptp-mac",
+      "plugins": [
+        {
+          "type": "ptp",
+          "ipam": {
+            "type": "host-local",
+            "subnet": "10.1.1.0/24"
+          }
+        },
+        {
+          "type": "tuning"
+        }
+      ]
+    }'
+```
+
 > This approach may not work for all plugins. For example, OKD SDN is
 > not compatible with `tuning` plugin.
 >
-> -   Plugins that handle custom MAC addresses natively: `ovs`.
+> -   Plugins that handle custom MAC addresses natively: `ovs`, `bridge`.
 >
-> -   Plugins that are compatible with `tuning` plugin: `flannel`,
->     `ptp`, `bridge`.
+> -   Plugins that are compatible with `tuning` plugin: `flannel`, `ptp`.
 >
 > -   Plugins that don't need special MAC address treatment: `sriov` (in
 >     `vfio` mode).
@@ -439,8 +459,8 @@ metadata:
   namespace: kubevirt
 spec:
   configuration:
-    networkConfiguration:
-      permitBridgeInterfaceOnPodNetwork: "false"
+    network:
+      permitBridgeInterfaceOnPodNetwork: false
 ```
 
 > **Note:** binding the pod network using `bridge` interface type may
@@ -513,8 +533,8 @@ spec:
 
 #### masquerade - IPv4 and IPv6 dual-stack support
 
-It is currently experimental, but `masquerade` mode can be used in IPv4 and IPv6
-dual-stack clusters to provide a VM with an IP connectivity over both protocols.
+`masquerade` mode can be used in IPv4 and IPv6 dual-stack clusters to provide
+a VM with an IP connectivity over both protocols.
 
 As with the IPv4 `masquerade` mode, the VM can be contacted using the pod's IP
 address - which will be in this case two IP addresses, one IPv4 and one
@@ -558,6 +578,23 @@ spec:
 > **Note:** The IPv6 address for the VM and default gateway **must** be the ones
 > shown above.
 
+#### masquerade - IPv6 single-stack support
+
+`masquerade` mode can be used in IPv6 single stack clusters to provide a VM
+with an IPv6 only connectivity.
+
+As with the IPv4 `masquerade` mode, the VM can be contacted using the pod's IP
+address - which will be in this case the IPv6 one.
+Outgoing traffic is also "NAT'ed" to the pod's respective IPv6 address.
+
+As with the dual-stack cluster, the configuration of the IPv6 address and the default route is
+not automatic; it should be configured via cloud init, as shown in the [dual-stack section](#masquerade-ipv4-and-ipv6-dual-stack-support).
+
+Unlike the dual-stack cluster, which has a DHCP server for IPv4, the IPv6 single stack cluster
+has no DHCP server at all. Therefore, the VM won't have the search domains information and
+reaching a destination using its FQDN is not possible.
+Tracking issue - https://github.com/kubevirt/kubevirt/issues/7184
+
 ### virtio-net multiqueue
 
 Setting the `networkInterfaceMultiqueue` to `true` will enable the
@@ -583,6 +620,7 @@ queue private to a specific vCPU.
 Without enabling the feature, network performance does not scale as the
 number of vCPUs increases. Guests cannot transmit or retrieve packets in
 parallel, as virtio-net has only one TX and RX queue.
+
 
 *NOTE*: Although the virtio-net multiqueue feature provides a
 performance benefit, it has some limitations and therefore should not be
@@ -768,6 +806,14 @@ In `macvtap` mode, virtual machines are directly exposed to the Kubernetes
 nodes L2 network. This is achieved by 'extending' an existing network interface
 with a virtual device that has its own MAC address.
 
+Macvtap interfaces are feature gated; to enable the feature, follow
+[these](../operations/activating_feature_gates.md#how-to-activate-a-feature-gate)
+instructions, in order to activate the `Macvtap` feature gate (case sensitive).
+
+#### Limitations
+
+- Live migration is not seamless, see [issue #5912](https://github.com/kubevirt/kubevirt/issues/5912#issuecomment-888938920)
+
 #### How to expose host interface to the macvtap device plugin
 To simplify the procedure, please use the
 [Cluster Network Addons Operator](https://github.com/kubevirt/cluster-network-addons-operator)
@@ -778,9 +824,10 @@ The aforementioned operator effectively deploys the
 combo.
 
 There are two different alternatives to configure which host interfaces get
-exposed to the user, enabling them to create macvtap interfaces on top of;
-  - select the host interfaces: indicates which host interfaces are exposed.
-  - expose all interfaces: all interfaces of all hosts are exposed.
+exposed to the user, enabling them to create macvtap interfaces on top of:
+
+- select the host interfaces: indicates which host interfaces are exposed.
+- expose all interfaces: all interfaces of all hosts are exposed.
 
 Both options are configured via the `macvtap-deviceplugin-config` ConfigMap,
 and more information on how to configure it can be found in the
@@ -893,3 +940,65 @@ name of the provisioned `NetworkAttachmentDefinition`.
 
 > **Note:** VMIs with macvtap interfaces can be migrated, but their MAC
 > addresses **must** be statically set.
+
+## Security
+
+### MAC spoof check
+
+MAC spoofing refers to the ability to generate traffic with an arbitrary source
+MAC address.
+An attacker may use this option to generate attacks on the network.
+
+In order to protect against such scenarios, it is possible to enable the
+mac-spoof-check support in CNI plugins that support it.
+
+The pod primary network which is served by the cluster network provider
+is not covered by this documentation. Please refer to the relevant provider to
+check how to enable spoofing check.
+The following text refers to the secondary networks, served using multus.
+
+There are two known CNI plugins that support mac-spoof-check:
+
+- [sriov-cni](https://github.com/openshift/sriov-cni):
+  Through the `spoofchk` parameter .
+- cnv-bridge: Through the `macspoofchk`.
+
+> **Note:** `cnv-bridge` is provided by
+  [CNAO](https://github.com/kubevirt/cluster-network-addons-operator).
+  The [bridge-cni](https://github.com/containernetworking/plugins) is planned
+  to support the `macspoofchk` options as well.
+
+The configuration is to be done on the  NetworkAttachmentDefinition by the
+operator and any interface that refers to it, will have this feature enabled.
+
+Below is an example of using the `cnv-bridge` CNI with `macspoofchk` enabled:
+```yaml
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: br-spoof-check
+spec:
+  config: '{
+            "cniVersion": "0.3.1",
+            "name": "br-spoof-check",
+            "type": "cnv-bridge",
+            "bridge": "br10",
+            "macspoofchk": true
+        }'
+```
+
+On the VMI, the network section should point to this
+NetworkAttachmentDefinition by name:
+```yaml
+  networks:
+  - name: default
+    pod: {}
+  - multus:
+      networkName: br-spoof-check
+    name: br10
+```
+
+#### Limitations
+
+- The `cnv-bridge` CNI supports mac-spoof-check through nftables, therefore
+the node must support nftables and have the `nft` binary deployed.

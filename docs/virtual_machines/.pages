@@ -5,8 +5,10 @@ nav:
   - presets.md
   - virtual_hardware.md
   - dedicated_cpu_resources.md
+  - numa.md
   - disks_and_volumes.md
   - interfaces_and_networks.md
+  - istio_service_mesh.md
   - networkpolicy.md
   - host-devices.md
   - windows_virtio_drivers.md
@@ -17,5 +19,8 @@ nav:
   - startup_scripts.md
   - service_objects.md
   - templates.md
+  - tekton_tasks.md
   - replicaset.md
   - dns.md
+  - boot_from_external_source.md
+  - confidential_computing.md

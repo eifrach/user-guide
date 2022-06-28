@@ -6,33 +6,32 @@ filters:
       - rmohr
       - stu-gott
       - fabiand
-      - codificat
       - danielBelenky
       - AlonaKaplan
       - dhiller
       - jean-edouard
-      - ashleyschuett
       - mhenriks
       - phoracek
-      - codificat
       - mazzystr
-      - hroyrh
+      - cwilkers
+      - jobbler
     approvers:
       - davidvossel
       - vladikr
       - rmohr
       - stu-gott
       - fabiand
-      - codificat
       - danielBelenky
       - AlonaKaplan
       - dhiller
       - jean-edouard
-      - ashleyschuett
       - mhenriks
       - phoracek
-      - codificat
       - mazzystr
+      - cwilkers
+    emeritus_approvers:
+      - ashleyschuett
+      - codificat
       - hroyrh
 
   "^docs/.*":

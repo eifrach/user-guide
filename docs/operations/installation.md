@@ -11,8 +11,9 @@ virtual machines.
 A few requirements need to be met before you can begin:
 
 -   [Kubernetes](https://kubernetes.io) cluster or derivative
-    (such as [OpenShift](https://github.com/openshift/origin), Tectonic)
-    based on Kubernetes 1.10 or greater
+    (such as [OpenShift](https://github.com/openshift/origin))
+    based on a one of the latest three Kubernetes releases that are
+    out at the time the KubeVirt release is made.
 -   Kubernetes apiserver must have `--allow-privileged=true` in order to run KubeVirt's privileged DaemonSet.
 -   `kubectl` client utility
 
@@ -56,7 +57,7 @@ how to install KubeVirt using an official release.
     $ kubectl -n kubevirt wait kv kubevirt --for condition=Available
 
 If hardware virtualization is not available, then a
-[software emulation fallback](https://github.com/kubevirt/kubevirt/blob/master/docs/software-emulation.md)
+[software emulation fallback](https://github.com/kubevirt/kubevirt/blob/main/docs/software-emulation.md)
 can be enabled using by setting in the KubeVirt CR `spec.configuration.developerConfiguration.useEmulation` to `true` as follows:
 
     $ kubectl edit -n kubevirt kubevirt kubevirt
@@ -92,7 +93,7 @@ All new components will be deployed under the `kubevirt` namespace:
 ## Installing KubeVirt on OKD
 
 The following
-[SCC](https://docs.openshift.com/container-platform/3.11/admin_guide/manage_scc.html)
+[SCC](https://docs.openshift.com/container-platform/4.10/authentication/managing-security-context-constraints.html)
 needs to be added prior KubeVirt deployment:
 
     $ oc adm policy add-scc-to-user privileged -n kubevirt -z kubevirt-operator
@@ -129,9 +130,11 @@ Once nodes are restarted with this configuration, the KubeVirt can be deployed a
 
 ## Installing the Daily Developer Builds
 
-KubeVirt releases daily a developer build from current master. One can see
+<!-- markdown-link-check-disable -->
+KubeVirt releases daily a developer build from the current main branch. One can see
 when the last release happened by looking at our
 [nightly-build-jobs](https://prow.apps.ovirt.org/?job=periodic-kubevirt-push-nightly-build-master).
+<!-- markdown-link-check-enable -->
 
 To install the latest developer build, run the following commands:
 
@@ -145,10 +148,18 @@ To find out which commit this build is based on, run:
     $ curl https://storage.googleapis.com/kubevirt-prow/devel/nightly/release/kubevirt/kubevirt/${LATEST}/commit
     d358cf085b5a86cc4fa516215f8b757a4e61def2
 
+### Experimental ARM64 developer builds
+
+Experimental ARM64 developer builds can be installed like this:
+
+    $ LATEST=$(curl -L https://storage.googleapis.com/kubevirt-prow/devel/nightly/release/kubevirt/kubevirt/latest-arm64)
+    $ kubectl apply -f https://storage.googleapis.com/kubevirt-prow/devel/nightly/release/kubevirt/kubevirt/${LATEST}/kubevirt-operator-arm64.yaml
+    $ kubectl apply -f https://storage.googleapis.com/kubevirt-prow/devel/nightly/release/kubevirt/kubevirt/${LATEST}/kubevirt-cr-arm64.yaml
+
 ## Deploying from Source
 
 See the [Developer Getting Started
-Guide](https://github.com/kubevirt/kubevirt/blob/master/docs/getting-started.md)
+Guide](https://github.com/kubevirt/kubevirt/blob/main/docs/getting-started.md)
 to understand how to build and deploy KubeVirt from source.
 
 ## Installing network plugins (optional)
@@ -158,16 +169,32 @@ allows user to utilize them. If you want to attach your VMs to multiple
 networks (Multus CNI) or have full control over L2 (OVS CNI), you need
 to deploy respective network plugins. For more information, refer to
 [OVS CNI installation
-guide](https://github.com/kubevirt/ovs-cni/blob/master/docs/deployment-on-arbitrary-cluster.md).
+guide](https://github.com/kubevirt/ovs-cni/blob/main/docs/deployment-on-arbitrary-cluster.md).
 
 > Note: KubeVirt Ansible [network
 > playbook](https://github.com/kubevirt/kubevirt-ansible/tree/master/playbooks#network)
 > installs these plugins by default.
 
-## Restricting virt-handler DaemonSet
+## Restricting KubeVirt components node placement
 
-You can patch the `virt-handler` DaemonSet post-deployment to restrict
-it to a specific subset of nodes with a nodeSelector. For example, to
-restrict the DaemonSet to only nodes with the "region=primary" label:
+You can restrict the placement of the KubeVirt components across your 
+cluster nodes by editing the KubeVirt CR:
 
-    kubectl patch ds/virt-handler -n kubevirt -p '{"spec": {"template": {"spec": {"nodeSelector": {"region": "primary"}}}}}'
+- The placement of the KubeVirt control plane components (virt-controller, virt-api)
+  is governed by the `.spec.infra.nodePlacement` field in the KubeVirt CR.
+- The placement of the virt-handler DaemonSet pods (and consequently, the placement of the 
+  VM workloads scheduled to the cluster) is governed by the `.spec.workloads.nodePlacement`
+  field in the KubeVirt CR.
+  
+For each of these `.nodePlacement` objects, the `.affinity`, `.nodeSelector` and `.tolerations` sub-fields can be configured.
+See the description in the [API reference](http://kubevirt.io/api-reference/master/definitions.html#_v1_componentconfig)
+for further information about using these fields.
+
+For example, to restrict the virt-controller and virt-api pods to only run on the control-plane nodes:
+
+    kubectl patch -n kubevirt kubevirt kubevirt --type merge --patch '{"spec": {"infra": {"nodePlacement": {"nodeSelector": {"node-role.kubernetes.io/control-plane": ""}}}}}'
+
+To restrict the virt-handler pods to only run on nodes with the "region=primary" label:
+
+    kubectl patch -n kubevirt kubevirt kubevirt --type merge --patch '{"spec": {"workloads": {"nodePlacement": {"nodeSelector": {"region": "primary"}}}}}'
+
